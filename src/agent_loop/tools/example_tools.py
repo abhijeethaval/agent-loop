@@ -99,6 +99,74 @@ def get_current_time(timezone: str = "UTC") -> ToolResult:
     )
 
 
+def read_url(url: str) -> ToolResult:
+    """Fetch and read content from a URL.
+    
+    Args:
+        url: The URL to fetch content from
+        
+    Returns:
+        ToolResult with the page content or error
+    """
+    import urllib.request
+    import urllib.error
+    from html.parser import HTMLParser
+    
+    class TextExtractor(HTMLParser):
+        """Simple HTML to text converter."""
+        def __init__(self):
+            super().__init__()
+            self.text_parts = []
+            self.skip_tags = {'script', 'style', 'meta', 'link', 'noscript'}
+            self.current_skip = False
+            
+        def handle_starttag(self, tag, attrs):
+            if tag in self.skip_tags:
+                self.current_skip = True
+                
+        def handle_endtag(self, tag):
+            if tag in self.skip_tags:
+                self.current_skip = False
+                
+        def handle_data(self, data):
+            if not self.current_skip:
+                text = data.strip()
+                if text:
+                    self.text_parts.append(text)
+                    
+        def get_text(self):
+            return ' '.join(self.text_parts)
+    
+    try:
+        # Create request with browser-like headers
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        }
+        req = urllib.request.Request(url, headers=headers)
+        
+        with urllib.request.urlopen(req, timeout=10) as response:
+            content = response.read().decode('utf-8', errors='ignore')
+            
+        # Extract text from HTML
+        parser = TextExtractor()
+        parser.feed(content)
+        text = parser.get_text()
+        
+        # Truncate if too long
+        max_length = 2000
+        if len(text) > max_length:
+            text = text[:max_length] + "... [truncated]"
+        
+        return ToolResult.success(
+            message=f"Successfully read content from {url}",
+            data={"url": url, "content": text, "length": len(text)}
+        )
+    except urllib.error.HTTPError as e:
+        return ToolResult.error(f"HTTP Error {e.code}: Could not access {url}. The page may require login or be restricted.")
+    except urllib.error.URLError as e:
+        return ToolResult.error(f"URL Error: Could not access {url}. Reason: {e.reason}")
+    except Exception as e:
+        return ToolResult.error(f"Failed to read {url}: {e}")
 def create_default_registry():
     """Create a registry with default example tools.
     
@@ -113,6 +181,11 @@ def create_default_registry():
         "search_web",
         search_web,
         "Search the web for information. Args: query (str)"
+    )
+    registry.register(
+        "read_url",
+        read_url,
+        "Fetch and read content from a URL or webpage. Args: url (str)"
     )
     registry.register(
         "calculate",
