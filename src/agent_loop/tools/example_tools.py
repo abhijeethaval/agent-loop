@@ -17,14 +17,22 @@ def search_web(query: str) -> ToolResult:
     Returns:
         ToolResult with simulated search results
     """
-    # Simulated search results
+    # Simulated search results with URLs the agent can use
+    safe_query = query.replace(' ', '_').replace('"', '').replace("'", '')
     results = [
-        f"Result 1: Information about '{query}' from Wikipedia",
-        f"Result 2: '{query}' - Latest news and updates",
-        f"Result 3: Understanding '{query}' - A comprehensive guide",
+        {"title": f"Information about '{query}' from Wikipedia", "url": f"https://example.com/wiki/{safe_query}"},
+        {"title": f"'{query}' - Latest news and updates", "url": f"https://example.com/news/{safe_query}"},
+        {"title": f"Understanding '{query}' - A comprehensive guide", "url": f"https://example.com/guide/{safe_query}"},
     ]
+    
+    # Build message with URLs included so LLM can see them (only message goes to history, not data)
+    result_lines = [f"Found {len(results)} results for '{query}':"]
+    for i, r in enumerate(results, 1):
+        result_lines.append(f"  {i}. {r['title']} - URL: {r['url']}")
+    result_lines.append("You can use read_url with one of these URLs, or synthesize an answer from the titles.")
+    
     return ToolResult.success(
-        message=f"Found {len(results)} results for '{query}'",
+        message="\n".join(result_lines),
         data={"results": results, "query": query}
     )
 
@@ -180,27 +188,27 @@ def create_default_registry():
     registry.register(
         "search_web",
         search_web,
-        "Search the web for information. Args: query (str)"
+        'Search the web and get results with URLs. Arguments JSON: {"query": "your search terms"}. Returns titles and URLs you can pass to read_url.'
     )
     registry.register(
         "read_url",
         read_url,
-        "Fetch and read content from a URL or webpage. Args: url (str)"
+        'Fetch content from a URL. Arguments JSON: {"url": "https://example.com/page"}. Use URLs from search_web results.'
     )
     registry.register(
         "calculate",
         calculate,
-        "Evaluate a mathematical expression. Args: expression (str)"
+        'Evaluate a math expression. Arguments JSON: {"expression": "2 + 2 * 3"}'
     )
     registry.register(
         "get_weather",
         get_weather,
-        "Get weather for a location. Args: location (str)"
+        'Get weather for a location. Arguments JSON: {"location": "Mumbai"}'
     )
     registry.register(
         "get_current_time",
         get_current_time,
-        "Get current time. Args: timezone (str, optional)"
+        'Get current time. Arguments JSON: {"timezone": "UTC"} (timezone is optional)'
     )
     
     return registry

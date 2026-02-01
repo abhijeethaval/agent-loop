@@ -25,9 +25,14 @@ class Act(dspy.Signature):
     Use 'tool' when:
     - You have gathered user information from history (via previous HITL)
     - You can now execute a tool to help achieve the goal
+    - IMPORTANT: Always include ALL required parameters in arguments JSON!
+    - Look at the tool description for the expected JSON format
+    - If a previous tool returned data (like URLs from search_web), extract and use those values
     
     Use 'final' when:
-    - You have gathered information and can provide the complete answer
+    - You have enough information from search results or tools to answer the user
+    - The search results contain sufficient information to synthesize an answer
+    - DO NOT keep searching if you already have relevant results - use them!
     - The goal is achieved or cannot be achieved
     
     Policy precedence (in order):
@@ -71,12 +76,15 @@ class Act(dspy.Signature):
         desc="Name of tool to execute. Required if decision_type is 'tool', otherwise empty string."
     )
     arguments: str = dspy.OutputField(
-        desc="JSON string of arguments for the tool. Required if decision_type is 'tool', otherwise '{}'."
+        desc='JSON string with ALL required arguments. Example: {\"url\": \"https://...\"}. CRITICAL: Extract actual values (like URLs) from previous tool results in history. Never leave required fields empty.'
     )
     hitl_request: str = dspy.OutputField(
         desc="Questions for the user. Only use if history does NOT already contain user responses to similar questions."
     )
     final_response: str = dspy.OutputField(
         desc="Complete final response to the user. Required if decision_type is 'final', otherwise empty string."
+    )
+    action_confirmation: str = dspy.OutputField(
+        desc="Confirmation of the action taken and its result. Use this to summarize what was done when decision_type is 'tool' or 'final'. Empty string if not applicable."
     )
 
