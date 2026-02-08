@@ -61,6 +61,16 @@ class ToolRegistry:
         for name, desc in self._descriptions.items():
             lines.append(f"- {name}: {desc}")
         return "\n".join(lines)
+
+    def get_tools_catalog(self) -> list[dict[str, str]]:
+        """Get structured tool metadata for typed policy input."""
+        return [
+            {
+                "name": name,
+                "description": self._descriptions.get(name, ""),
+            }
+            for name in self._tools
+        ]
     
     def execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         """Execute a tool by name with given arguments.

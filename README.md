@@ -4,7 +4,7 @@ A deterministic, auditable agentic loop built using DSPy as a reasoning compiler
 
 ## Features
 
-- **Multi-step tool invocation** - Execute tools based on LLM decisions
+- **Multi-step + parallel tool invocation** - Execute one or more tools per decision step
 - **Human-in-the-Loop (HITL)** - First-class support for human escalation
 - **Streaming support** - Token streaming for rationale and responses
 - **Observability** - Full audit trail for replay and compliance

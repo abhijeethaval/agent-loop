@@ -4,6 +4,7 @@ The orchestrator owns state and controls the loop.
 DSPy produces intent, not effects.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -110,7 +111,7 @@ class Orchestrator:
                 org_policies=policy_context.org_policies,
                 industry_rules=policy_context.industry_rules,
                 domain_guidelines=policy_context.domain_guidelines,
-                available_tools=self._tools.get_tools_description(),
+                available_tools=self._tools.get_tools_catalog(),
             )
             
             # Log decision to audit
@@ -177,30 +178,64 @@ class Orchestrator:
             # Handle tool execution
             if decision.decision_type == "tool":
                 step += 1
-                result = self._tools.execute(
-                    decision.selected_tool,
-                    decision.arguments,
-                )
-                
-                state.add_history_entry(
-                    step=step,
-                    actor="tool",
-                    action=decision.selected_tool,
-                    arguments=decision.arguments,
-                    outcome=result.status,
-                    result=result.message,
-                )
-                
+                if not decision.tool_calls:
+                    result_message = "Policy selected 'tool' but provided no executable tool calls."
+                    state.add_history_entry(
+                        step=step,
+                        actor="tool",
+                        action="tool_batch",
+                        arguments={},
+                        outcome="error",
+                        result=result_message,
+                    )
+                    self._audit.log_outcome(
+                        step=step,
+                        outcome_type="tool",
+                        status="error",
+                        result=result_message,
+                        data={"tool_calls": []},
+                    )
+                    if self._console:
+                        self._console.print(f"  [bold red]tool[/bold red]: {result_message}")
+                    continue
+
+                tool_results = self._execute_tool_calls_parallel(decision)
+                has_error = any(result.status == "error" for _, _, result in tool_results)
+
+                for tool_name, arguments, result in tool_results:
+                    state.add_history_entry(
+                        step=step,
+                        actor="tool",
+                        action=tool_name,
+                        arguments=arguments,
+                        outcome=result.status,
+                        result=result.message,
+                    )
+                    if self._console:
+                        self._print_tool_result(tool_name, result)
+
                 self._audit.log_outcome(
                     step=step,
                     outcome_type="tool",
-                    status=result.status,
-                    result=result.message,
-                    data=result.data,
+                    status="error" if has_error else "success",
+                    result=(
+                        f"Executed {len(tool_results)} tool call(s)."
+                        if not has_error
+                        else f"Executed {len(tool_results)} tool call(s) with at least one error."
+                    ),
+                    data={
+                        "tool_calls": [
+                            {
+                                "name": tool_name,
+                                "arguments": arguments,
+                                "status": result.status,
+                                "message": result.message,
+                                "data": result.data,
+                            }
+                            for tool_name, arguments, result in tool_results
+                        ]
+                    },
                 )
-                
-                if self._console:
-                    self._print_tool_result(decision.selected_tool, result)
         
         else:
             # Max steps reached
@@ -219,8 +254,10 @@ class Orchestrator:
         """Extract decision-specific details for logging."""
         if decision.decision_type == "tool":
             return {
-                "selected_tool": decision.selected_tool,
-                "arguments": decision.arguments,
+                "tool_calls": [
+                    {"name": call.name, "arguments": call.arguments}
+                    for call in decision.tool_calls
+                ],
             }
         elif decision.decision_type == "hitl":
             return {"hitl_request": decision.hitl_request}
@@ -250,8 +287,18 @@ class Orchestrator:
                       if len(decision.rationale) > 100 else decision.rationale)
         
         if decision.decision_type == "tool":
-            table.add_row("Tool", decision.selected_tool)
-            table.add_row("Arguments", str(decision.arguments))
+            if len(decision.tool_calls) == 1:
+                call = decision.tool_calls[0]
+                table.add_row("Tool", call.name)
+                table.add_row("Arguments", str(call.arguments))
+            elif len(decision.tool_calls) == 0:
+                table.add_row("Tool Calls", "[]")
+            else:
+                calls_text = "\n".join(
+                    f"{idx + 1}. {call.name} {call.arguments}"
+                    for idx, call in enumerate(decision.tool_calls)
+                )
+                table.add_row("Tool Calls", calls_text)
         elif decision.decision_type == "hitl":
             table.add_row("HITL Request", decision.hitl_request)
         
@@ -263,6 +310,23 @@ class Orchestrator:
         self._console.print(
             f"  [bold {status_style}]{tool}[/bold {status_style}]: {result.message}"
         )
+
+    def _execute_tool_calls_parallel(
+        self,
+        decision: DecisionOutput,
+    ) -> list[tuple[str, dict[str, Any], ToolResult]]:
+        """Execute requested tool calls concurrently, preserving decision order."""
+        max_workers = max(1, min(len(decision.tool_calls), 8))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(self._tools.execute, call.name, call.arguments)
+                for call in decision.tool_calls
+            ]
+
+            return [
+                (call.name, call.arguments, future.result())
+                for call, future in zip(decision.tool_calls, futures, strict=False)
+            ]
     
     def _print_final(self, state: AgentState) -> None:
         """Print final response."""

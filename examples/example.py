@@ -22,19 +22,19 @@ def run_with_mock_lm():
         """{
             "rationale": "The user wants to know about the weather in Tokyo. I should use the get_weather tool to fetch current conditions.",
             "decision_type": "tool",
-            "selected_tool": "get_weather",
-            "arguments": "{\\"location\\": \\"Tokyo\\"}",
+            "tool_calls": [{"name": "get_weather", "arguments": {"location": "Tokyo"}}],
             "hitl_request": "",
-            "final_response": ""
+            "final_response": "",
+            "action_confirmation": ""
         }""",
         # Second call - produce final response
         """{
             "rationale": "I have obtained the weather information for Tokyo. Now I can provide a helpful response to the user.",
             "decision_type": "final",
-            "selected_tool": "",
-            "arguments": "{}",
+            "tool_calls": [],
             "hitl_request": "",
-            "final_response": "The current weather in Tokyo is available. Based on the weather tool, conditions are typical for the season. Please check the history for specific details about temperature and conditions."
+            "final_response": "The current weather in Tokyo is available. Based on the weather tool, conditions are typical for the season. Please check the history for specific details about temperature and conditions.",
+            "action_confirmation": ""
         }"""
     ]
     
@@ -143,7 +143,7 @@ def run_programmatic_example():
         history=state.get_history_dicts(),
         policy_context={"org_policies": "test"},
         decision_type="tool",
-        decision_details={"selected_tool": "calc"},
+        decision_details={"tool_calls": [{"name": "calc", "arguments": {"expression": "1000 * 1.05 ** 10"}}]},
         rationale="Using calculator to compute compound interest",
     )
     
