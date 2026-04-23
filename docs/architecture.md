@@ -22,66 +22,18 @@ real world. This separation is what makes runs replayable and auditable.
 This is a **decision system, not a chatbot**. Each loop iteration produces one
 of three outcomes: invoke tool(s), ask a human, or finalize.
 
+> **Diagrams.** Every figure in this document lives as a standalone Mermaid
+> source file under [`diagrams/`](./diagrams/). GitHub renders `.mmd` files
+> inline when you open them; locally you can render them with
+> [`mmdc`](https://github.com/mermaid-js/mermaid-cli) or paste the contents
+> into [mermaid.live](https://mermaid.live). Each section below links to the
+> figure it describes.
+
 ## 2. Layered Architecture
 
-```mermaid
-flowchart TB
-    subgraph Entry["Entry Layer"]
-        CLI["main.py<br/>CLI / LM configuration"]
-        API["__init__.py<br/>Public Python API"]
-    end
-
-    subgraph Core["Orchestration Layer"]
-        ORCH["Orchestrator<br/>(orchestrator.py)<br/>owns the run loop"]
-    end
-
-    subgraph Decide["Decision Layer (intent only)"]
-        POL["AgentPolicy<br/>(policy/policy.py)"]
-        SIG["Act Signature<br/>(policy/signature.py)"]
-        DSPY[("DSPy ChainOfThought<br/>+ dspy.LM")]
-    end
-
-    subgraph Exec["Execution Layer (effects)"]
-        REG["ToolRegistry<br/>(tools/registry.py)"]
-        TOOLS["Tool functions<br/>(tools/example_tools.py)"]
-        HITL["HITLHandler<br/>(hitl/handler.py)"]
-    end
-
-    subgraph Data["Data Layer (Pydantic)"]
-        STATE["AgentState<br/>HistoryEntry"]
-        CTX["PolicyContext"]
-        TR["ToolResult"]
-    end
-
-    subgraph Obs["Observability Layer"]
-        AUDIT["AuditLogger<br/>JSONL trail"]
-        STREAM["StreamHandler"]
-    end
-
-    CLI --> ORCH
-    API --> ORCH
-
-    ORCH -->|state snapshot + ctx| POL
-    POL --> SIG
-    POL --> DSPY
-    DSPY -->|DecisionOutput| POL
-    POL -->|DecisionOutput| ORCH
-
-    ORCH -->|execute| REG
-    REG --> TOOLS
-    TOOLS -->|ToolResult| REG
-    REG -->|ToolResult| ORCH
-
-    ORCH -->|request_human_input| HITL
-    HITL -->|human reply| ORCH
-
-    ORCH -->|read / append| STATE
-    ORCH -->|read| CTX
-    REG -.uses.-> TR
-
-    ORCH -->|log_decision / log_outcome| AUDIT
-    ORCH -->|on_complete| STREAM
-```
+Figure: [`diagrams/layered-architecture.mmd`](./diagrams/layered-architecture.mmd)
+&mdash; entry / orchestration / decision / execution / data / observability layers
+and the arrows that cross them.
 
 **Key invariant:** arrows into the Decision Layer carry only *snapshots* of
 state. The policy never holds a reference to mutable state and never produces
@@ -107,56 +59,10 @@ side effects.
 
 ## 4. Domain Model
 
-```mermaid
-classDiagram
-    class AgentState {
-        +str goal
-        +list~str~ user_messages
-        +list~HistoryEntry~ history
-        +str|None final_response
-        +add_history_entry(...)
-        +get_history_dicts() list~dict~
-    }
-
-    class HistoryEntry {
-        +int step
-        +str actor       %% agent | tool | human
-        +str action
-        +dict|None arguments
-        +str outcome     %% success | error | feedback
-        +str result
-    }
-
-    class PolicyContext {
-        +str org_policies
-        +str industry_rules
-        +str domain_guidelines
-    }
-
-    class ToolResult {
-        +str status      %% success | error
-        +str message
-        +dict|None data
-        +success(message, data)$ ToolResult
-        +error(message, data)$ ToolResult
-    }
-
-    class DecisionOutput {
-        +str rationale
-        +str decision_type  %% tool | hitl | final
-        +list~ToolCall~ tool_calls
-        +str hitl_request
-        +str final_response
-    }
-
-    class ToolCall {
-        +str name
-        +dict arguments
-    }
-
-    AgentState "1" o-- "many" HistoryEntry
-    DecisionOutput "1" o-- "many" ToolCall
-```
+Figure: [`diagrams/domain-model.mmd`](./diagrams/domain-model.mmd) &mdash; class
+diagram of the core Pydantic models (`AgentState`, `HistoryEntry`,
+`PolicyContext`, `ToolResult`, `DecisionOutput`, `ToolCall`) and their
+relationships.
 
 The boundary between layers is enforced by these Pydantic models. The policy
 receives `AgentState` + `PolicyContext` and returns a `DecisionOutput`; the
@@ -168,35 +74,9 @@ orchestrator turns tool executions into `ToolResult` and appends
 The heart of the system is `Orchestrator.run(state, policy_context)`. Each
 iteration is a *Decide &rarr; Dispatch &rarr; Mutate &rarr; Audit* cycle.
 
-```mermaid
-flowchart TD
-    Start(["run(state, ctx)"]) --> Step{"step &lt; max_steps?"}
-    Step -- no --> Terminate["state.final_response = 'terminated'<br/>return state"]
-    Step -- yes --> Decide["policy.decide(snapshot)"]
-    Decide --> LogD["audit.log_decision(...)"]
-    LogD --> Route{decision_type}
-
-    Route -- final --> Final["state.final_response = ...<br/>stream.on_complete(...)"]
-    Final --> Return(["return state"])
-
-    Route -- hitl --> HReq["append HistoryEntry<br/>(actor=agent, hitl_request)"]
-    HReq --> HAsk["hitl.request_human_input(...)"]
-    HAsk --> HResp["append HistoryEntry<br/>(actor=human, hitl_response)"]
-    HResp --> LogH["audit.log_outcome(hitl)"]
-    LogH --> Inc1["step += 1"]
-    Inc1 --> Step
-
-    Route -- tool --> HasCalls{tool_calls<br/>non-empty?}
-    HasCalls -- no --> ToolErr["append HistoryEntry<br/>(actor=agent, outcome=error)"]
-    ToolErr --> LogE["audit.log_outcome(error)"]
-    LogE --> Inc2["step += 1"]
-    Inc2 --> Step
-
-    HasCalls -- yes --> Parallel["ThreadPoolExecutor<br/>execute tool_calls in parallel<br/>(max 8 workers)"]
-    Parallel --> Append["for each result:<br/>append HistoryEntry<br/>(actor=tool, outcome=success|error)"]
-    Append --> LogT["audit.log_outcome(tool)"]
-    LogT --> Inc2
-```
+Figure: [`diagrams/run-loop.mmd`](./diagrams/run-loop.mmd) &mdash; flowchart
+of the loop's branches for `final`, `hitl`, and `tool` decisions (including
+the empty-`tool_calls` error branch and the parallel-execution path).
 
 **Notes on the loop**
 
@@ -215,44 +95,9 @@ The LLM's job is fully described by a single DSPy signature in
 `policy/signature.py`. The orchestrator hands the policy a state snapshot
 plus the policy context; the policy returns a `DecisionOutput`.
 
-```mermaid
-flowchart LR
-    subgraph In["Inputs (read-only)"]
-        G[goal: str]
-        UM[user_messages: list str]
-        HIST["history: list~HistoryRecord~"]
-        OP[org_policies]
-        IR[industry_rules]
-        DG[domain_guidelines]
-        AT["available_tools: list~ToolSpec~"]
-    end
-
-    Sig{{"DSPy ChainOfThought<br/>(Act signature)"}}
-
-    subgraph Out["Outputs"]
-        R[rationale: str]
-        DT["decision_type: tool | hitl | final"]
-        TC["tool_calls: list~ToolCall~"]
-        HR[hitl_request: str]
-        FR[final_response: str]
-        AC[action_confirmation: str]
-    end
-
-    G --> Sig
-    UM --> Sig
-    HIST --> Sig
-    OP --> Sig
-    IR --> Sig
-    DG --> Sig
-    AT --> Sig
-
-    Sig --> R
-    Sig --> DT
-    Sig --> TC
-    Sig --> HR
-    Sig --> FR
-    Sig --> AC
-```
+Figure: [`diagrams/decision-contract.mmd`](./diagrams/decision-contract.mmd)
+&mdash; the inputs the `Act` signature receives and the output fields it must
+produce.
 
 `AgentPolicy.decide()` then **normalizes** the raw DSPy output:
 
@@ -267,16 +112,9 @@ well-formed `DecisionOutput`.
 
 ## 7. Tools as Plugins
 
-```mermaid
-flowchart LR
-    Dev["Developer code"] -->|register name, fn, description| Reg[ToolRegistry]
-    Reg -->|get_tools_catalog| Pol[AgentPolicy]
-    Pol -->|tool_calls| Orch[Orchestrator]
-    Orch -->|execute name, args| Reg
-    Reg -->|lookup| Fn["tool function<br/>(**kwargs) &rarr; ToolResult"]
-    Fn -->|ToolResult| Reg
-    Reg -->|normalized ToolResult| Orch
-```
+Figure: [`diagrams/tools-as-plugins.mmd`](./diagrams/tools-as-plugins.mmd)
+&mdash; how a tool flows from registration, into the policy's tool catalog,
+through `ToolRegistry.execute`, and back out as a normalized `ToolResult`.
 
 `ToolRegistry.execute` is the single funnel that:
 
@@ -298,24 +136,9 @@ returns `decision_type == "hitl"`, the orchestrator:
 3. Appends a `human` history entry with the response.
 4. Continues the loop &mdash; the next decision sees the answer in history.
 
-```mermaid
-sequenceDiagram
-    participant Orch as Orchestrator
-    participant Pol as AgentPolicy
-    participant State as AgentState
-    participant H as HITLHandler
-    participant Audit as AuditLogger
-
-    Orch->>Pol: decide(state snapshot + ctx)
-    Pol-->>Orch: DecisionOutput(decision_type="hitl", hitl_request=...)
-    Orch->>Audit: log_decision(...)
-    Orch->>State: add_history_entry(actor="agent", action="hitl_request")
-    Orch->>H: request_human_input(request)
-    H-->>Orch: human reply
-    Orch->>State: add_history_entry(actor="human", action="hitl_response")
-    Orch->>Audit: log_outcome(type="hitl", status="feedback")
-    Note over Orch: step += 1, loop continues
-```
+Figure: [`diagrams/hitl-sequence.mmd`](./diagrams/hitl-sequence.mmd) &mdash;
+sequence diagram of the HITL round-trip through the orchestrator, state, the
+handler, and the audit log.
 
 Three handlers ship in `hitl/handler.py`:
 
@@ -355,42 +178,11 @@ extension point.
 ## 11. End-to-End Example
 
 A typical research-style run, showing the loop dispatching across all three
-decision types:
+decision types.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as User / CLI
-    participant O as Orchestrator
-    participant P as AgentPolicy (DSPy)
-    participant R as ToolRegistry
-    participant H as HITLHandler
-    participant A as AuditLogger
-
-    U->>O: run(AgentState(goal,...), PolicyContext(...))
-    O->>P: decide(snapshot #1)
-    P-->>O: tool: [search_web("qubits")]
-    O->>A: log_decision(step=0)
-    O->>R: execute("search_web", {...})
-    R-->>O: ToolResult.success(message, data)
-    O->>O: state.add_history_entry(actor=tool)
-    O->>A: log_outcome(step=0, tool, success)
-
-    O->>P: decide(snapshot #2)
-    P-->>O: hitl: "Beginner or expert audience?"
-    O->>A: log_decision(step=1)
-    O->>O: add_history_entry(actor=agent, hitl_request)
-    O->>H: request_human_input(...)
-    H-->>O: "beginner"
-    O->>O: add_history_entry(actor=human, hitl_response)
-    O->>A: log_outcome(step=1, hitl, feedback)
-
-    O->>P: decide(snapshot #3)
-    P-->>O: final: "Qubits are..."
-    O->>A: log_decision(step=2)
-    O->>O: state.final_response = "Qubits are..."
-    O-->>U: AgentState (with final_response)
-```
+Figure: [`diagrams/end-to-end-sequence.mmd`](./diagrams/end-to-end-sequence.mmd)
+&mdash; three-iteration trace (`tool` &rarr; `hitl` &rarr; `final`) across the
+orchestrator, policy, registry, HITL handler, and audit logger.
 
 ## 12. Design Properties That Fall Out
 

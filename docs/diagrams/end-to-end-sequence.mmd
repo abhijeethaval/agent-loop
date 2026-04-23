@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    participant U as User / CLI
+    participant O as Orchestrator
+    participant P as AgentPolicy (DSPy)
+    participant R as ToolRegistry
+    participant H as HITLHandler
+    participant A as AuditLogger
+
+    U->>O: run(AgentState(goal,...), PolicyContext(...))
+    O->>P: decide(snapshot #1)
+    P-->>O: tool: [search_web("qubits")]
+    O->>A: log_decision(step=0)
+    O->>R: execute("search_web", {...})
+    R-->>O: ToolResult.success(message, data)
+    O->>O: state.add_history_entry(actor=tool)
+    O->>A: log_outcome(step=0, tool, success)
+
+    O->>P: decide(snapshot #2)
+    P-->>O: hitl: "Beginner or expert audience?"
+    O->>A: log_decision(step=1)
+    O->>O: add_history_entry(actor=agent, hitl_request)
+    O->>H: request_human_input(...)
+    H-->>O: "beginner"
+    O->>O: add_history_entry(actor=human, hitl_response)
+    O->>A: log_outcome(step=1, hitl, feedback)
+
+    O->>P: decide(snapshot #3)
+    P-->>O: final: "Qubits are..."
+    O->>A: log_decision(step=2)
+    O->>O: state.final_response = "Qubits are..."
+    O-->>U: AgentState (with final_response)

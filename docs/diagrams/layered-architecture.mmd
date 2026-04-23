@@ -1,0 +1,56 @@
+flowchart TB
+    subgraph Entry["Entry Layer"]
+        CLI["main.py<br/>CLI / LM configuration"]
+        API["__init__.py<br/>Public Python API"]
+    end
+
+    subgraph Core["Orchestration Layer"]
+        ORCH["Orchestrator<br/>(orchestrator.py)<br/>owns the run loop"]
+    end
+
+    subgraph Decide["Decision Layer (intent only)"]
+        POL["AgentPolicy<br/>(policy/policy.py)"]
+        SIG["Act Signature<br/>(policy/signature.py)"]
+        DSPY[("DSPy ChainOfThought<br/>+ dspy.LM")]
+    end
+
+    subgraph Exec["Execution Layer (effects)"]
+        REG["ToolRegistry<br/>(tools/registry.py)"]
+        TOOLS["Tool functions<br/>(tools/example_tools.py)"]
+        HITL["HITLHandler<br/>(hitl/handler.py)"]
+    end
+
+    subgraph Data["Data Layer (Pydantic)"]
+        STATE["AgentState<br/>HistoryEntry"]
+        CTX["PolicyContext"]
+        TR["ToolResult"]
+    end
+
+    subgraph Obs["Observability Layer"]
+        AUDIT["AuditLogger<br/>JSONL trail"]
+        STREAM["StreamHandler"]
+    end
+
+    CLI --> ORCH
+    API --> ORCH
+
+    ORCH -->|state snapshot + ctx| POL
+    POL --> SIG
+    POL --> DSPY
+    DSPY -->|DecisionOutput| POL
+    POL -->|DecisionOutput| ORCH
+
+    ORCH -->|execute| REG
+    REG --> TOOLS
+    TOOLS -->|ToolResult| REG
+    REG -->|ToolResult| ORCH
+
+    ORCH -->|request_human_input| HITL
+    HITL -->|human reply| ORCH
+
+    ORCH -->|read / append| STATE
+    ORCH -->|read| CTX
+    REG -.uses.-> TR
+
+    ORCH -->|log_decision / log_outcome| AUDIT
+    ORCH -->|on_complete| STREAM
