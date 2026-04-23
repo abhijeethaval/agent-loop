@@ -116,9 +116,9 @@ def read_url(url: str) -> ToolResult:
     Returns:
         ToolResult with the page content or error
     """
-    import urllib.request
-    import urllib.error
     import ssl
+    import urllib.error
+    import urllib.request
     from html.parser import HTMLParser
     
     # For simulated example.com URLs, return mock content

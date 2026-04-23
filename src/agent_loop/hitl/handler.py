@@ -4,7 +4,7 @@ HITL is a first-class decision outcome. Human input is treated as data, not inst
 """
 
 from abc import ABC, abstractmethod
-from typing import Callable
+from collections.abc import Callable
 
 from rich.console import Console
 from rich.panel import Panel

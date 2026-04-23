@@ -97,12 +97,10 @@ def run_programmatic_example():
     print("Programmatic Usage Example (No LM Required)")
     print("=" * 60)
     
-    from agent_loop.models.state import AgentState, HistoryEntry
-    from agent_loop.models.policy_context import PolicyContext
-    from agent_loop.models.tool_result import ToolResult
-    from agent_loop.tools.registry import ToolRegistry
-    from agent_loop.tools.example_tools import search_web, calculate
     from agent_loop.audit.logger import AuditLogger
+    from agent_loop.models.state import AgentState
+    from agent_loop.tools.example_tools import calculate, search_web
+    from agent_loop.tools.registry import ToolRegistry
     
     # Create a custom tool registry
     registry = ToolRegistry()
@@ -114,7 +112,7 @@ def run_programmatic_example():
     
     # Execute a tool
     result = registry.execute("calc", {"expression": "2 + 2 * 10"})
-    print(f"\n2. Tool execution result:")
+    print("\n2. Tool execution result:")
     print(f"   {result}")
     
     # Create state and manipulate history
@@ -131,7 +129,7 @@ def run_programmatic_example():
         result="Result: 1628.89",
     )
     
-    print(f"\n3. Agent state created:")
+    print("\n3. Agent state created:")
     print(f"   Goal: {state.goal}")
     print(f"   History: {len(state.history)} entries")
     
@@ -147,7 +145,7 @@ def run_programmatic_example():
         rationale="Using calculator to compute compound interest",
     )
     
-    print(f"\n4. Audit log entry created:")
+    print("\n4. Audit log entry created:")
     print(f"   Session: {logger.session_id}")
     print(f"   Entries: {len(logger.entries)}")
     
