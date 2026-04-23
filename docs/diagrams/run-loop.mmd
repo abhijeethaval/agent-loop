@@ -1,0 +1,27 @@
+flowchart TD
+    Start(["run(state, ctx)"]) --> Step{"step &lt; max_steps?"}
+    Step -- no --> Terminate["state.final_response = 'terminated'<br/>return state"]
+    Step -- yes --> Decide["policy.decide(snapshot)"]
+    Decide --> LogD["audit.log_decision(...)"]
+    LogD --> Route{decision_type}
+
+    Route -- final --> Final["state.final_response = ...<br/>stream.on_complete(...)"]
+    Final --> Return(["return state"])
+
+    Route -- hitl --> HReq["append HistoryEntry<br/>(actor=agent, hitl_request)"]
+    HReq --> HAsk["hitl.request_human_input(...)"]
+    HAsk --> HResp["append HistoryEntry<br/>(actor=human, hitl_response)"]
+    HResp --> LogH["audit.log_outcome(hitl)"]
+    LogH --> Inc1["step += 1"]
+    Inc1 --> Step
+
+    Route -- tool --> HasCalls{tool_calls<br/>non-empty?}
+    HasCalls -- no --> ToolErr["append HistoryEntry<br/>(actor=agent, outcome=error)"]
+    ToolErr --> LogE["audit.log_outcome(error)"]
+    LogE --> Inc2["step += 1"]
+    Inc2 --> Step
+
+    HasCalls -- yes --> Parallel["ThreadPoolExecutor<br/>execute tool_calls in parallel<br/>(max 8 workers)"]
+    Parallel --> Append["for each result:<br/>append HistoryEntry<br/>(actor=tool, outcome=success|error)"]
+    Append --> LogT["audit.log_outcome(tool)"]
+    LogT --> Inc2

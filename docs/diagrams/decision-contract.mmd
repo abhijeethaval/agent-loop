@@ -1,0 +1,36 @@
+flowchart LR
+    subgraph In["Inputs (read-only)"]
+        G[goal: str]
+        UM[user_messages: list str]
+        HIST["history: list~HistoryRecord~"]
+        OP[org_policies]
+        IR[industry_rules]
+        DG[domain_guidelines]
+        AT["available_tools: list~ToolSpec~"]
+    end
+
+    Sig{{"DSPy ChainOfThought<br/>(Act signature)"}}
+
+    subgraph Out["Outputs"]
+        R[rationale: str]
+        DT["decision_type: tool | hitl | final"]
+        TC["tool_calls: list~ToolCall~"]
+        HR[hitl_request: str]
+        FR[final_response: str]
+        AC[action_confirmation: str]
+    end
+
+    G --> Sig
+    UM --> Sig
+    HIST --> Sig
+    OP --> Sig
+    IR --> Sig
+    DG --> Sig
+    AT --> Sig
+
+    Sig --> R
+    Sig --> DT
+    Sig --> TC
+    Sig --> HR
+    Sig --> FR
+    Sig --> AC

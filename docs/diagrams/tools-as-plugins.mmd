@@ -1,0 +1,8 @@
+flowchart LR
+    Dev["Developer code"] -->|register name, fn, description| Reg[ToolRegistry]
+    Reg -->|get_tools_catalog| Pol[AgentPolicy]
+    Pol -->|tool_calls| Orch[Orchestrator]
+    Orch -->|execute name, args| Reg
+    Reg -->|lookup| Fn["tool function<br/>(**kwargs) &rarr; ToolResult"]
+    Fn -->|ToolResult| Reg
+    Reg -->|normalized ToolResult| Orch

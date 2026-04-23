@@ -1,0 +1,48 @@
+classDiagram
+    class AgentState {
+        +str goal
+        +list~str~ user_messages
+        +list~HistoryEntry~ history
+        +str|None final_response
+        +add_history_entry(...)
+        +get_history_dicts() list~dict~
+    }
+
+    class HistoryEntry {
+        +int step
+        +str actor       %% agent | tool | human
+        +str action
+        +dict|None arguments
+        +str outcome     %% success | error | feedback
+        +str result
+    }
+
+    class PolicyContext {
+        +str org_policies
+        +str industry_rules
+        +str domain_guidelines
+    }
+
+    class ToolResult {
+        +str status      %% success | error
+        +str message
+        +dict|None data
+        +success(message, data)$ ToolResult
+        +error(message, data)$ ToolResult
+    }
+
+    class DecisionOutput {
+        +str rationale
+        +str decision_type  %% tool | hitl | final
+        +list~ToolCall~ tool_calls
+        +str hitl_request
+        +str final_response
+    }
+
+    class ToolCall {
+        +str name
+        +dict arguments
+    }
+
+    AgentState "1" o-- "many" HistoryEntry
+    DecisionOutput "1" o-- "many" ToolCall

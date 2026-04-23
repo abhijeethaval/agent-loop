@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant Orch as Orchestrator
+    participant Pol as AgentPolicy
+    participant State as AgentState
+    participant H as HITLHandler
+    participant Audit as AuditLogger
+
+    Orch->>Pol: decide(state snapshot + ctx)
+    Pol-->>Orch: DecisionOutput(decision_type="hitl", hitl_request=...)
+    Orch->>Audit: log_decision(...)
+    Orch->>State: add_history_entry(actor="agent", action="hitl_request")
+    Orch->>H: request_human_input(request)
+    H-->>Orch: human reply
+    Orch->>State: add_history_entry(actor="human", action="hitl_response")
+    Orch->>Audit: log_outcome(type="hitl", status="feedback")
+    Note over Orch: step += 1, loop continues
