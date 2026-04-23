@@ -13,12 +13,12 @@ from rich.panel import Panel
 from rich.table import Table
 
 from agent_loop.audit.logger import AuditLogger
-from agent_loop.hitl.handler import HITLHandler, ConsoleHITLHandler
+from agent_loop.hitl.handler import ConsoleHITLHandler, HITLHandler
 from agent_loop.models.policy_context import PolicyContext
 from agent_loop.models.state import AgentState
 from agent_loop.models.tool_result import ToolResult
 from agent_loop.policy.policy import AgentPolicy, DecisionOutput
-from agent_loop.streaming.streamer import StreamHandler, NullStreamHandler, StreamingConfig
+from agent_loop.streaming.streamer import NullStreamHandler, StreamHandler, StreamingConfig
 from agent_loop.tools.registry import ToolRegistry
 
 

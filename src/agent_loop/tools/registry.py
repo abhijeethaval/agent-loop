@@ -3,7 +3,7 @@
 Tools are registered with the orchestrator and executed outside of DSPy.
 """
 
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from agent_loop.models.tool_result import ToolResult
 

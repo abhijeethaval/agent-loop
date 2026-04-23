@@ -5,11 +5,9 @@ Streaming is a transport concern, not a policy concern.
 """
 
 from abc import ABC, abstractmethod
-from typing import Callable
+from collections.abc import Callable
 
 from rich.console import Console
-from rich.live import Live
-from rich.markdown import Markdown
 
 
 class StreamHandler(ABC):

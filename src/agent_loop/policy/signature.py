@@ -8,7 +8,6 @@ from typing import Any, Literal
 import dspy
 from pydantic import BaseModel, Field
 
-
 DecisionType = Literal["tool", "hitl", "final"]
 
 
